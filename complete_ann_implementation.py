@@ -1,52 +1,7 @@
-"""
-================================================================================
-COMPLETE ANN IMPLEMENTATION FOR HYBRID NANOFLUID FLOW MODELING
-================================================================================
+# complete ann implementation
+# this file contains everything from data generation to model training and validation
 
-This file contains a complete, self-contained implementation of an Artificial
-Neural Network (ANN) for modeling hybrid nanofluid flow over a stretching sheet.
-
-Author: [Your Name]
-Project: Hybrid Nanofluid Flow Analysis using Deep Learning
-Date: December 2025
-
-WHAT THIS CODE DOES:
--------------------
-1. Solves physics equations (ODEs) to generate training data
-2. Builds a 9-layer neural network with 30 neurons per layer
-3. Trains the model using the Adam optimizer
-4. Validates the model against test cases
-5. Creates visualizations of results
-
-HOW TO RUN:
------------
-Simply run this file:
-    python complete_ann_implementation.py
-
-The code will automatically:
-- Generate training data (~32,400 samples)
-- Train the neural network
-- Validate the results
-- Save plots and model checkpoints
-
-REQUIREMENTS:
--------------
-- numpy
-- pandas
-- torch (PyTorch)
-- scipy
-- matplotlib
-- seaborn
-- scikit-learn
-- tqdm
-
-Install with: pip install numpy pandas torch scipy matplotlib seaborn scikit-learn tqdm
-================================================================================
-"""
-
-# ============================================================================
-# STEP 1: IMPORT REQUIRED LIBRARIES
-# ============================================================================
+# step 1: import all required libraries
 print("=" * 80)
 print("HYBRID NANOFLUID ANN - COMPLETE IMPLEMENTATION")
 print("=" * 80)
@@ -71,62 +26,56 @@ import pickle
 
 warnings.filterwarnings('ignore')
 
-# Set random seeds for reproducibility
+# set random seeds for reproducibility
 np.random.seed(42)
 torch.manual_seed(42)
 
 print("✓ All libraries imported successfully!")
 
 
-# ============================================================================
-# STEP 2: DEFINE CONFIGURATION AND PARAMETERS
-# ============================================================================
+# step 2: configuration and hyperparameters
 print("\nStep 2: Setting up configuration...")
 
 class Config:
-    """Configuration class containing all hyperparameters and settings"""
-    
-    # Directory setup
+    # directory paths
     BASE_DIR = Path.cwd()
     DATA_DIR = BASE_DIR / "data"
     OUTPUT_DIR = BASE_DIR / "outputs"
     MODEL_DIR = OUTPUT_DIR / "models"
     PLOT_DIR = OUTPUT_DIR / "plots"
     
-    # Physics parameters - different combinations to generate diverse data
+    # physics parameters for different test cases
     PARAM_RANGES = {
-        'M': [0.5, 1.0, 2.0],           # Magnetic parameter (3 values)
-        'Nr': [0.5, 1.0, 1.5],          # Radiation parameter (3 values)
-        'Nh': [0.1, 0.5],               # Heat transfer parameter (2 values)
-        'lam': [0.5, 1.0, 1.5],         # Velocity slip parameter (3 values)
-        'beta': [0.1, 0.2],             # Thermal slip parameter (2 values)
-        'Pr': [6.2],                    # Prandtl number (1 value)
-        'n': [1.0],                     # Power-law index (1 value)
-        'Tr': [1.5],                    # Temperature ratio (1 value)
-        'As': [1.0],                    # Aspect ratio (1 value)
+        'M': [0.5, 1.0, 2.0],      
+        'Nr': [0.5, 1.0, 1.5],     
+        'Nh': [0.1, 0.5],          
+        'lam': [0.5, 1.0, 1.5],    
+        'beta': [0.1, 0.2],        
+        'Pr': [6.2],               
+        'n': [1.0],                
+        'Tr': [1.5],               
+        'As': [1.0],               
     }
-    # Total combinations: 3×3×2×3×2 = 108 parameter sets
     
-    # Numerical solver settings
-    ETA_MAX = 10.0                      # Maximum similarity variable value
-    N_POINTS = 400                      # Number of points per solution
+    # numerical solver settings
+    ETA_MAX = 10.0        
+    N_POINTS = 400        
     
-    # Neural network architecture
-    INPUT_DIM = 1                       # Input: eta (similarity variable)
-    HIDDEN_DIM = 30                     # Neurons per hidden layer
-    NUM_HIDDEN_LAYERS = 9               # Number of hidden layers
-    OUTPUT_DIM = 2                      # Outputs: f and theta
-    ACTIVATION = 'tanh'                 # Activation function
+    # neural network architecture
+    INPUT_DIM = 1         
+    HIDDEN_DIM = 30       
+    NUM_HIDDEN_LAYERS = 9 
+    OUTPUT_DIM = 2        
     
-    # Training parameters
-    EPOCHS = 100                        # Maximum training epochs
-    BATCH_SIZE = 512                    # Batch size for training
-    LEARNING_RATE = 0.001               # Learning rate for Adam optimizer
-    EARLY_STOPPING_PATIENCE = 1000      # Patience for early stopping
-    VAL_SPLIT = 0.1                     # Validation set ratio
-    TEST_SPLIT = 0.1                    # Test set ratio
+    # training hyperparameters
+    EPOCHS = 100                    
+    BATCH_SIZE = 512                
+    LEARNING_RATE = 0.005           
+    EARLY_STOPPING_PATIENCE = 1000  
+    VAL_SPLIT = 0.1                 
+    TEST_SPLIT = 0.1                
 
-# Create necessary directories
+# create output directories
 Config.DATA_DIR.mkdir(exist_ok=True, parents=True)
 Config.MODEL_DIR.mkdir(exist_ok=True, parents=True)
 Config.PLOT_DIR.mkdir(exist_ok=True, parents=True)
@@ -137,100 +86,64 @@ print(f"  - Output directory: {Config.OUTPUT_DIR}")
 print(f"  - Total parameter combinations: {np.prod([len(v) for v in Config.PARAM_RANGES.values()])}")
 
 
-# ============================================================================
-# STEP 3: IMPLEMENT PHYSICS-BASED ODE SOLVER
-# ============================================================================
+# step 3: physics-based ode solver for hybrid nanofluid
 print("\nStep 3: Setting up physics-based ODE solver...")
 
 class HybridNanofluidSolver:
-    """
-    Solves the governing ODEs for hybrid nanofluid flow.
-    
-    This class implements a boundary value problem (BVP) solver for the
-    momentum and energy equations describing hybrid nanofluid flow over
-    a stretching sheet with magnetic field effects.
-    """
-    
     def __init__(self, params):
-        """Initialize solver with physics parameters"""
-        # Extract parameters
-        self.M = params.get('M', 1.0)           # Magnetic parameter
-        self.Nr = params.get('Nr', 0.5)         # Radiation parameter
-        self.Nh = params.get('Nh', 0.5)         # Heat transfer parameter
-        self.lam = params.get('lam', 1.0)       # Velocity slip parameter
-        self.beta = params.get('beta', 0.1)     # Thermal slip parameter
-        self.Pr = params.get('Pr', 6.2)         # Prandtl number
-        self.n = params.get('n', 1.0)           # Power-law index
-        self.Tr = params.get('Tr', 1.5)         # Temperature ratio
-        self.As = params.get('As', 1.0)         # Aspect ratio
+        # physics parameters
+        self.M = params.get('M', 1.0)
+        self.Nr = params.get('Nr', 0.5)
+        self.Nh = params.get('Nh', 0.5)
+        self.lam = params.get('lam', 1.0)
+        self.beta = params.get('beta', 0.1)
+        self.Pr = params.get('Pr', 6.2)
+        self.n = params.get('n', 1.0)
+        self.Tr = params.get('Tr', 1.5)
+        self.As = params.get('As', 1.0)
         
-        # Nanofluid property ratios (typical values for hybrid nanofluids)
-        self.nu_ratio = params.get('nu_ratio', 1.05)       # Viscosity ratio
-        self.kappa_ratio = params.get('kappa_ratio', 1.15) # Thermal conductivity ratio
-        self.sigma_ratio = params.get('sigma_ratio', 1.10) # Electrical conductivity ratio
-        self.rho_ratio = params.get('rho_ratio', 1.03)     # Density ratio
+        # nanofluid property ratios
+        self.nu_ratio = params.get('nu_ratio', 1.05)
+        self.kappa_ratio = params.get('kappa_ratio', 1.15)
+        self.sigma_ratio = params.get('sigma_ratio', 1.10)
+        self.rho_ratio = params.get('rho_ratio', 1.03)
         
-        # Solver settings
+        # solver settings
         self.eta_max = params.get('eta_max', 10.0)
         self.n_points = params.get('n_points', 400)
     
     def ode_system(self, eta, y):
-        """
-        Define the system of ODEs.
-        
-        Variables:
-        - f: dimensionless stream function
-        - fp: first derivative of f (velocity)
-        - fpp: second derivative of f
-        - theta: dimensionless temperature
-        - thetap: first derivative of theta
-        """
+        # extract variables: f, f', f'', theta, theta'
         f, fp, fpp, theta, thetap = y
         
-        # Momentum equation: solve for f''' (third derivative)
+        # momentum equation - solve for f'''
         term1 = f * fpp
         term2 = (2.0 * self.n) / (self.n + 1.0) * (1.0 - fp**2)
         term3 = -2.0 / (self.n + 1.0) * (self.sigma_ratio / self.rho_ratio * self.M) * (fp - 1.0)
         fppp = -(term1 + term2 + term3) / self.nu_ratio
         
-        # Energy equation: solve for θ'' (second derivative)
-        theta_term = 1.0 + (self.Tr - 1.0) * theta
-        theta_term = np.maximum(theta_term, 0.01)  # Prevent division by zero
-        
-        coeff_theta_pp = self.kappa_ratio + self.Nr / (theta_term**3)
-        term1_energy = self.Pr * self.As * (f * thetap - 2.0 * (2.0 * self.n - 1.0) / (self.n + 1.0) * fp * theta)
-        term2_energy = 3.0 * self.Nr * (self.Tr - 1.0) / (theta_term**2) * (thetap**2)
-        thetapp = -(term1_energy + term2_energy) / coeff_theta_pp
+        # energy equation - solve for theta''
+        theta_term = np.maximum(1.0 + (self.Tr - 1.0) * theta, 0.01)
+        coeff = self.kappa_ratio + self.Nr / (theta_term**3)
+        term1_e = self.Pr * self.As * (f * thetap - 2.0 * (2.0 * self.n - 1.0) / (self.n + 1.0) * fp * theta)
+        term2_e = 3.0 * self.Nr * (self.Tr - 1.0) / (theta_term**2) * (thetap**2)
+        thetapp = -(term1_e + term2_e) / coeff
         
         return np.vstack([fp, fpp, fppp, thetap, thetapp])
     
     def boundary_conditions(self, ya, yb):
-        """
-        Define boundary conditions.
-        
-        At η = 0 (wall):
-        - f(0) = 0 (no penetration)
-        - f'(0) = λ + β*f''(0) (velocity slip)
-        - θ'(0) = -Nh*(1 - θ(0)) (thermal slip)
-        
-        At η → ∞ (far field):
-        - f'(∞) = 1 (free stream velocity)
-        - θ(∞) = 0 (ambient temperature)
-        """
+        # boundary conditions at eta=0 and eta=infinity
         bc = np.zeros(5)
-        bc[0] = ya[0]                                    # f(0) = 0
-        bc[1] = ya[1] - (self.lam + self.beta * ya[2])  # f'(0) = λ + β*f''(0)
-        bc[2] = ya[4] + self.Nh * (1.0 - ya[3])         # θ'(0) = -Nh*(1 - θ(0))
-        bc[3] = yb[1] - 1.0                              # f'(∞) = 1
-        bc[4] = yb[3]                                    # θ(∞) = 0
+        bc[0] = ya[0]                                   # f(0) = 0
+        bc[1] = ya[1] - (self.lam + self.beta * ya[2]) # f'(0) = lam + beta*f''(0)
+        bc[2] = ya[4] + self.Nh * (1.0 - ya[3])        # theta'(0) = -Nh*(1-theta(0))
+        bc[3] = yb[1] - 1.0                             # f'(inf) = 1
+        bc[4] = yb[3]                                   # theta(inf) = 0
         return bc
     
     def solve(self, verbose=False):
-        """Solve the BVP using scipy's solve_bvp"""
-        # Create initial grid
+        # create grid and initial guess
         eta = np.linspace(0, self.eta_max, self.n_points)
-        
-        # Initial guess (smart initialization based on expected behavior)
         f_init = eta - np.exp(-eta)
         fp_init = 1.0 - np.exp(-eta)
         fpp_init = np.exp(-eta)
@@ -238,54 +151,38 @@ class HybridNanofluidSolver:
         thetap_init = -np.exp(-eta)
         y_init = np.vstack([f_init, fp_init, fpp_init, theta_init, thetap_init])
         
-        # Solve BVP
+        # solve boundary value problem
         try:
             sol = solve_bvp(self.ode_system, self.boundary_conditions, eta, y_init,
                           max_nodes=5000, tol=1e-6, verbose=0)
-            
             if sol.success:
-                if verbose:
-                    print(f"✓ Solution converged. RMS residual: {sol.rms_residuals.max():.2e}")
                 return sol.x, sol.y
-            else:
-                if verbose:
-                    print(f"✗ Solution failed: {sol.message}")
-                return None, None
-        except Exception as e:
-            if verbose:
-                print(f"✗ Solver error: {str(e)}")
+            return None, None
+        except:
             return None, None
     
     def compute_engineering_quantities(self, solution):
-        """Compute skin friction and Nusselt number"""
-        fpp_0 = solution[2][0]      # f''(0)
-        thetap_0 = solution[4][0]   # θ'(0)
-        
-        Cf = fpp_0                  # Skin friction coefficient
-        Nu = -thetap_0              # Nusselt number
-        
-        return {'Cf': Cf, 'Nu': Nu, 'fpp_0': fpp_0, 'thetap_0': thetap_0}
+        # compute skin friction and nusselt number
+        fpp_0 = solution[2][0]
+        thetap_0 = solution[4][0]
+        return {'Cf': fpp_0, 'Nu': -thetap_0, 'fpp_0': fpp_0, 'thetap_0': thetap_0}
 
 print("✓ ODE solver implemented!")
 
 
-# ============================================================================
-# STEP 4: GENERATE TRAINING DATA
-# ============================================================================
+# step 4: data generation from physics equations
 print("\nStep 4: Generating training data from physics equations...")
 
 class DataGenerator:
-    """Generates training data by solving ODEs for different parameter combinations"""
-    
     def __init__(self):
         self.param_combinations = self._generate_parameter_grid()
     
     def _generate_parameter_grid(self):
-        """Generate all combinations of parameters"""
+        # generate all combinations of parameters
         keys = Config.PARAM_RANGES.keys()
         values = Config.PARAM_RANGES.values()
-        
         param_combinations = []
+        
         for combination in itertools.product(*values):
             params = dict(zip(keys, combination))
             params['eta_max'] = Config.ETA_MAX
@@ -295,17 +192,17 @@ class DataGenerator:
         return param_combinations
     
     def solve_single_case(self, params, case_id):
-        """Solve ODE for a single parameter set"""
+        # solve ode for one parameter set
         solver = HybridNanofluidSolver(params)
         eta, solution = solver.solve(verbose=False)
         
         if solution is None:
             return None
         
-        # Extract results
+        # extract engineering quantities
         eng_quantities = solver.compute_engineering_quantities(solution)
         
-        # Create DataFrame
+        # create dataframe with results
         df = pd.DataFrame({
             'case_id': case_id,
             'eta': eta,
@@ -326,50 +223,38 @@ class DataGenerator:
             'Cf': eng_quantities['Cf'],
             'Nu': eng_quantities['Nu']
         })
-        
         return df
     
     def generate_dataset(self):
-        """Generate complete training dataset"""
+        # generate complete training dataset
         print(f"  Generating {len(self.param_combinations)} parameter combinations...")
         print(f"  Total data points: {len(self.param_combinations) * Config.N_POINTS}")
         
         all_data = []
-        failed_cases = []
-        
         for case_id, params in enumerate(tqdm(self.param_combinations, desc="  Solving ODEs")):
             df = self.solve_single_case(params, case_id)
-            
             if df is not None:
                 all_data.append(df)
-            else:
-                failed_cases.append(case_id)
         
-        # Concatenate all data
+        # save to csv
         if all_data:
             full_dataset = pd.concat(all_data, ignore_index=True)
-            
-            # Save to CSV
             output_path = Config.DATA_DIR / "training_data.csv"
             full_dataset.to_csv(output_path, index=False)
             
             print(f"\n  ✓ Dataset saved to: {output_path}")
             print(f"    - Successful cases: {len(all_data)}/{len(self.param_combinations)}")
             print(f"    - Total rows: {len(full_dataset)}")
-            print(f"    - Features: eta, f, theta (and derivatives)")
-            
             return full_dataset
-        else:
-            print("  ✗ No successful cases!")
-            return None
+        return None
     
     def generate_test_cases(self, n_cases=10):
-        """Generate random test cases for validation"""
+        # generate random test cases
         print(f"\n  Generating {n_cases} random test cases...")
-        
         test_data = []
+        
         for case_id in tqdm(range(n_cases), desc="  Generating test cases"):
-            # Random parameters within ranges
+            # random parameters
             params = {
                 'M': np.random.uniform(0.3, 2.5),
                 'Nr': np.random.uniform(0.1, 1.2),
@@ -388,17 +273,16 @@ class DataGenerator:
             if df is not None:
                 test_data.append(df)
         
+        # save test data
         if test_data:
             test_dataset = pd.concat(test_data, ignore_index=True)
             output_path = Config.DATA_DIR / "test_data.csv"
             test_dataset.to_csv(output_path, index=False)
-            
             print(f"  ✓ Test dataset saved: {len(test_dataset)} rows")
             return test_dataset
-        else:
-            return None
+        return None
 
-# Generate data
+# generate training and test data
 generator = DataGenerator()
 train_data = generator.generate_dataset()
 test_data = generator.generate_test_cases(n_cases=10)
@@ -406,14 +290,10 @@ test_data = generator.generate_test_cases(n_cases=10)
 print("\n✓ Data generation complete!")
 
 
-# ============================================================================
-# STEP 5: PREPARE DATA FOR TRAINING
-# ============================================================================
+# step 5: data preprocessing and normalization
 print("\nStep 5: Preparing data for neural network training...")
 
 class DataPreprocessor:
-    """Handles data loading, normalization, and splitting"""
-    
     def __init__(self, data_path):
         self.data_path = data_path
         self.scaler_eta = MinMaxScaler()
@@ -421,28 +301,27 @@ class DataPreprocessor:
         self.scaler_theta = MinMaxScaler()
     
     def load_and_preprocess(self):
-        """Load data and prepare for training"""
+        # load and preprocess data
         print("  Loading dataset...")
         df = pd.read_csv(self.data_path)
-        
         print(f"  Total samples: {len(df)}")
         print(f"  Unique cases: {df['case_id'].nunique()}")
         
-        # Extract features and targets
+        # extract features and targets
         eta = df['eta'].values.reshape(-1, 1)
         f = df['f'].values.reshape(-1, 1)
         theta = df['theta'].values.reshape(-1, 1)
         
-        # Normalize to [0, 1] range
+        # normalize to [0, 1]
         print("  Normalizing data...")
         eta_normalized = self.scaler_eta.fit_transform(eta)
         f_normalized = self.scaler_f.fit_transform(f)
         theta_normalized = self.scaler_theta.fit_transform(theta)
         
-        # Combine targets (f and theta)
+        # combine outputs
         targets = np.hstack([f_normalized, theta_normalized])
         
-        # Split data: 80% train, 10% validation, 10% test
+        # split into train/val/test
         print("  Splitting into train/validation/test sets...")
         X_train, X_temp, y_train, y_temp = train_test_split(
             eta_normalized, targets,
@@ -458,8 +337,8 @@ class DataPreprocessor:
         print(f"  Validation samples: {len(X_val)}")
         print(f"  Test samples: {len(X_test)}")
         
-        # Convert to PyTorch tensors
-        data = {
+        # convert to pytorch tensors
+        return {
             'X_train': torch.FloatTensor(X_train),
             'y_train': torch.FloatTensor(y_train),
             'X_val': torch.FloatTensor(X_val),
@@ -467,11 +346,9 @@ class DataPreprocessor:
             'X_test': torch.FloatTensor(X_test),
             'y_test': torch.FloatTensor(y_test)
         }
-        
-        return data
     
     def save_scalers(self):
-        """Save scalers for later use"""
+        # save scalers for later use
         with open(Config.MODEL_DIR / 'scaler_eta.pkl', 'wb') as f:
             pickle.dump(self.scaler_eta, f)
         with open(Config.MODEL_DIR / 'scaler_f.pkl', 'wb') as f:
@@ -480,7 +357,7 @@ class DataPreprocessor:
             pickle.dump(self.scaler_theta, f)
         print(f"  ✓ Scalers saved to {Config.MODEL_DIR}")
 
-# Preprocess data
+# preprocess data
 preprocessor = DataPreprocessor(Config.DATA_DIR / "training_data.csv")
 data = preprocessor.load_and_preprocess()
 preprocessor.save_scalers()
@@ -488,48 +365,30 @@ preprocessor.save_scalers()
 print("\n✓ Data preprocessing complete!")
 
 
-# ============================================================================
-# STEP 6: BUILD NEURAL NETWORK MODEL
-# ============================================================================
+# step 6: neural network architecture
 print("\nStep 6: Building neural network architecture...")
 
-class HybridNanofluidANN(nn.Module):
-    """
-    Artificial Neural Network for Hybrid Nanofluid Flow Prediction
-    
-    Architecture:
-    - Input layer: 1 neuron (eta)
-    - Hidden layers: 9 layers × 30 neurons each
-    - Activation: Tanh
-    - Output layer: 2 neurons (f, theta)
-    """
-    
+class ANNModel(nn.Module):
     def __init__(self):
-        super(HybridNanofluidANN, self).__init__()
+        super(ANNModel, self).__init__()
         
-        # Build network layers
         layers = []
         
-        # Input layer: 1 → 30
         layers.append(nn.Linear(Config.INPUT_DIM, Config.HIDDEN_DIM))
         layers.append(nn.Tanh())
         
-        # Hidden layers: 30 → 30 (repeated 8 times, total 9 hidden layers)
         for _ in range(Config.NUM_HIDDEN_LAYERS - 1):
             layers.append(nn.Linear(Config.HIDDEN_DIM, Config.HIDDEN_DIM))
             layers.append(nn.Tanh())
         
-        # Output layer: 30 → 2
         layers.append(nn.Linear(Config.HIDDEN_DIM, Config.OUTPUT_DIM))
         
-        # Combine all layers
         self.network = nn.Sequential(*layers)
         
-        # Initialize weights using Xavier initialization
         self._initialize_weights()
     
     def _initialize_weights(self):
-        """Initialize weights using Xavier uniform distribution"""
+        # xavier initialization
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -537,15 +396,13 @@ class HybridNanofluidANN(nn.Module):
                     nn.init.zeros_(module.bias)
     
     def forward(self, eta):
-        """Forward pass through the network"""
         return self.network(eta)
     
     def count_parameters(self):
-        """Count total trainable parameters"""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
     
     def get_summary(self):
-        """Get model architecture summary"""
+        # print model architecture
         summary = []
         summary.append("=" * 60)
         summary.append("ANN Architecture Summary")
@@ -559,28 +416,24 @@ class HybridNanofluidANN(nn.Module):
         summary.append("=" * 60)
         return "\n".join(summary)
 
-# Create model
-model = HybridNanofluidANN()
+# create model
+model = ANNModel()
 print(model.get_summary())
 
 print("\n✓ Neural network built successfully!")
 
 
-# ============================================================================
-# STEP 7: TRAIN THE NEURAL NETWORK
-# ============================================================================
+# step 7: model training
 print("\nStep 7: Training the neural network...")
 
 class Trainer:
-    """Handles model training with progress tracking"""
-    
     def __init__(self, model, device='cpu'):
         self.model = model.to(device)
         self.device = device
         self.optimizer = optim.Adam(model.parameters(), lr=Config.LEARNING_RATE)
         self.criterion = nn.MSELoss()
         
-        # Training history
+        # training history
         self.history = {
             'train_loss': [],
             'val_loss': [],
@@ -588,27 +441,27 @@ class Trainer:
         }
     
     def train_epoch(self, X_train, y_train, batch_size):
-        """Train for one epoch"""
+        # train for one epoch
         self.model.train()
         total_loss = 0.0
         n_batches = 0
         
-        # Shuffle data
+        # shuffle data
         n_samples = len(X_train)
         indices = torch.randperm(n_samples)
         
-        # Process in batches
+        # process batches
         for i in range(0, n_samples, batch_size):
             batch_indices = indices[i:i + batch_size]
             X_batch = X_train[batch_indices].to(self.device)
             y_batch = y_train[batch_indices].to(self.device)
             
-            # Forward pass
+            # forward pass
             self.optimizer.zero_grad()
             predictions = self.model(X_batch)
             loss = self.criterion(predictions, y_batch)
             
-            # Backward pass
+            # backward pass
             loss.backward()
             self.optimizer.step()
             
@@ -618,19 +471,17 @@ class Trainer:
         return total_loss / n_batches
     
     def validate(self, X_val, y_val):
-        """Validate the model"""
+        # validate model
         self.model.eval()
-        
         with torch.no_grad():
             X_val = X_val.to(self.device)
             y_val = y_val.to(self.device)
             predictions = self.model(X_val)
             loss = self.criterion(predictions, y_val)
-        
         return loss.item()
     
     def train(self, X_train, y_train, X_val, y_val, epochs, batch_size):
-        """Complete training loop"""
+        # complete training loop
         print(f"\n  Training Configuration:")
         print(f"  - Optimizer: Adam")
         print(f"  - Learning rate: {Config.LEARNING_RATE}")
@@ -645,27 +496,24 @@ class Trainer:
         for epoch in range(epochs):
             start_time = time.time()
             
-            # Train
+            # train and validate
             train_loss = self.train_epoch(X_train, y_train, batch_size)
-            
-            # Validate
             val_loss = self.validate(X_val, y_val)
-            
             epoch_time = time.time() - start_time
             
-            # Save history
+            # save history
             self.history['train_loss'].append(train_loss)
             self.history['val_loss'].append(val_loss)
             self.history['epoch_time'].append(epoch_time)
             
-            # Print progress every 10 epochs
+            # print progress
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 print(f"  Epoch {epoch+1:3d}/{epochs} | "
                       f"Train Loss: {train_loss:.6f} | "
                       f"Val Loss: {val_loss:.6f} | "
                       f"Time: {epoch_time:.2f}s")
             
-            # Early stopping
+            # early stopping check
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
@@ -677,57 +525,48 @@ class Trainer:
                 print(f"\n  Early stopping at epoch {epoch+1}")
                 break
         
-        # Restore best model
+        # restore best model
         self.model.load_state_dict(self.best_model_state)
         
         print("\n" + "=" * 70)
         print(f"  ✓ Training complete!")
         print(f"  Best validation loss: {best_val_loss:.6f}")
-        
         return self.history
     
     def evaluate(self, X_test, y_test):
-        """Evaluate model on test set"""
+        # evaluate on test set
         self.model.eval()
-        
         with torch.no_grad():
             X_test = X_test.to(self.device)
             y_test = y_test.to(self.device)
             predictions = self.model(X_test)
         
-        # Compute metrics
+        # compute metrics
         mse = torch.mean((predictions - y_test) ** 2).item()
         mae = torch.mean(torch.abs(predictions - y_test)).item()
         max_error = torch.max(torch.abs(predictions - y_test)).item()
         
-        # Per-output metrics
-        f_pred = predictions[:, 0]
-        theta_pred = predictions[:, 1]
-        f_true = y_test[:, 0]
-        theta_true = y_test[:, 1]
+        # per-output metrics
+        mse_f = torch.mean((predictions[:, 0] - y_test[:, 0]) ** 2).item()
+        mse_theta = torch.mean((predictions[:, 1] - y_test[:, 1]) ** 2).item()
         
-        mse_f = torch.mean((f_pred - f_true) ** 2).item()
-        mse_theta = torch.mean((theta_pred - theta_true) ** 2).item()
-        
-        metrics = {
+        return {
             'mse': mse,
             'mae': mae,
             'max_error': max_error,
             'mse_f': mse_f,
             'mse_theta': mse_theta
         }
-        
-        return metrics
     
     def save_model(self, path):
-        """Save model checkpoint"""
+        # save model checkpoint
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'history': self.history
         }, path)
         print(f"  ✓ Model saved to {path}")
 
-# Train the model
+# train the model
 trainer = Trainer(model)
 history = trainer.train(
     data['X_train'], data['y_train'],
@@ -739,9 +578,7 @@ history = trainer.train(
 print("\n✓ Training complete!")
 
 
-# ============================================================================
-# STEP 8: EVALUATE MODEL PERFORMANCE
-# ============================================================================
+# step 8: model evaluation
 print("\nStep 8: Evaluating model performance...")
 
 metrics = trainer.evaluate(data['X_test'], data['y_test'])
@@ -755,27 +592,25 @@ print(f"  MSE (f):            {metrics['mse_f']:.6e}")
 print(f"  MSE (theta):        {metrics['mse_theta']:.6e}")
 print("  " + "=" * 50)
 
-# Save model
+# save model
 model_path = Config.MODEL_DIR / "best_model.pth"
 trainer.save_model(model_path)
 
 print("\n✓ Evaluation complete!")
 
 
-# ============================================================================
-# STEP 9: VISUALIZE RESULTS
-# ============================================================================
+# step 9: visualization
 print("\nStep 9: Creating visualizations...")
 
-# Set style
+# set plot style
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (14, 10)
 plt.rcParams['font.size'] = 10
 
-# Create figure with subplots
+# create 4-panel figure
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-# Plot 1: Training History - Loss
+# plot 1: training and validation loss
 ax1 = axes[0, 0]
 epochs_range = range(1, len(history['train_loss']) + 1)
 ax1.plot(epochs_range, history['train_loss'], 'b-', linewidth=2, label='Training Loss')
@@ -787,7 +622,7 @@ ax1.legend()
 ax1.grid(True, alpha=0.3)
 ax1.set_yscale('log')
 
-# Plot 2: Training History - Time per Epoch
+# plot 2: time per epoch
 ax2 = axes[0, 1]
 ax2.plot(epochs_range, history['epoch_time'], 'g-', linewidth=2)
 ax2.set_xlabel('Epoch')
@@ -795,7 +630,7 @@ ax2.set_ylabel('Time (seconds)')
 ax2.set_title('Time per Epoch')
 ax2.grid(True, alpha=0.3)
 
-# Plot 3: Predictions vs True Values (f)
+# plot 3: predictions vs true (f)
 ax3 = axes[1, 0]
 model.eval()
 with torch.no_grad():
@@ -810,7 +645,7 @@ ax3.set_ylabel('Predicted f (normalized)')
 ax3.set_title('Predictions vs True Values (f)')
 ax3.grid(True, alpha=0.3)
 
-# Plot 4: Predictions vs True Values (theta)
+# plot 4: predictions vs true (theta)
 ax4 = axes[1, 1]
 ax4.scatter(y_test_np[:, 1], predictions[:, 1], alpha=0.5, s=10)
 ax4.plot([y_test_np[:, 1].min(), y_test_np[:, 1].max()],
@@ -825,27 +660,26 @@ plot_path = Config.PLOT_DIR / "training_results.png"
 plt.savefig(plot_path, dpi=300, bbox_inches='tight')
 print(f"  ✓ Training results plot saved to: {plot_path}")
 
-# Create detailed prediction plot for a sample case
+# create sample prediction plot
 fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
 
-# Load test data
+# load test case
 test_df = pd.read_csv(Config.DATA_DIR / "test_data.csv")
 sample_case = test_df[test_df['case_id'] == 1000].copy()
 
-# Normalize eta
+# normalize and predict
 eta_sample = sample_case['eta'].values.reshape(-1, 1)
 eta_normalized = preprocessor.scaler_eta.transform(eta_sample)
 
-# Make predictions
 model.eval()
 with torch.no_grad():
     predictions_sample = model(torch.FloatTensor(eta_normalized)).numpy()
 
-# Denormalize predictions
+# denormalize predictions
 f_pred = preprocessor.scaler_f.inverse_transform(predictions_sample[:, 0].reshape(-1, 1))
 theta_pred = preprocessor.scaler_theta.inverse_transform(predictions_sample[:, 1].reshape(-1, 1))
 
-# Plot f
+# plot velocity profile
 axes2[0].plot(sample_case['eta'], sample_case['f'], 'b-', linewidth=2, label='True (ODE Solution)')
 axes2[0].plot(sample_case['eta'], f_pred, 'r--', linewidth=2, label='ANN Prediction')
 axes2[0].set_xlabel('η')
@@ -854,7 +688,7 @@ axes2[0].set_title('Velocity Profile Prediction')
 axes2[0].legend()
 axes2[0].grid(True, alpha=0.3)
 
-# Plot theta
+# plot temperature profile
 axes2[1].plot(sample_case['eta'], sample_case['theta'], 'b-', linewidth=2, label='True (ODE Solution)')
 axes2[1].plot(sample_case['eta'], theta_pred, 'r--', linewidth=2, label='ANN Prediction')
 axes2[1].set_xlabel('η')
@@ -871,9 +705,7 @@ print(f"  ✓ Sample predictions plot saved to: {plot_path2}")
 print("\n✓ Visualization complete!")
 
 
-# ============================================================================
-# STEP 10: SUMMARY AND FINAL REPORT
-# ============================================================================
+# step 10: final summary
 print("\n" + "=" * 80)
 print("FINAL SUMMARY")
 print("=" * 80)
@@ -910,7 +742,3 @@ print(f"   - Data: {Config.DATA_DIR}")
 print("\n" + "=" * 80)
 print("✓ ALL STEPS COMPLETED SUCCESSFULLY!")
 print("=" * 80)
-
-print("\nYou can now use the trained model for predictions!")
-print("The model has been saved and can be loaded for future use.")
-print("\nThank you for using this implementation!")
