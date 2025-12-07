@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 *.so
 
+
 readme/
 .Python
 build/
@@ -73,7 +74,6 @@ outputs/models/
 *.pkl
 *.pickle
 
-outputs/
 results/
 logs/
 *.log
