@@ -1,7 +1,7 @@
 # complete ann implementation
 # this file contains everything from data generation to model training and validation
 
-# step 1: import all required libraries
+# 1: import all required libraries
 print("=" * 80)
 print("HYBRID NANOFLUID ANN - COMPLETE IMPLEMENTATION")
 print("=" * 80)
@@ -33,7 +33,7 @@ torch.manual_seed(42)
 print("✓ All libraries imported successfully!")
 
 
-# step 2: configuration and hyperparameters
+# 2: configuration and hyperparameters
 print("\nStep 2: Setting up configuration...")
 
 class Config:
@@ -68,9 +68,9 @@ class Config:
     OUTPUT_DIM = 2        
     
     # training hyperparameters
-    EPOCHS = 100                    
+    EPOCHS = 500                   
     BATCH_SIZE = 512                
-    LEARNING_RATE = 0.005           
+    LEARNING_RATE = 0.001           
     EARLY_STOPPING_PATIENCE = 1000  
     VAL_SPLIT = 0.1                 
     TEST_SPLIT = 0.1                
@@ -86,7 +86,7 @@ print(f"  - Output directory: {Config.OUTPUT_DIR}")
 print(f"  - Total parameter combinations: {np.prod([len(v) for v in Config.PARAM_RANGES.values()])}")
 
 
-# step 3: physics-based ode solver for hybrid nanofluid
+# 3: physics-based ode solver for hybrid nanofluid
 print("\nStep 3: Setting up physics-based ODE solver...")
 
 class HybridNanofluidSolver:
@@ -170,7 +170,7 @@ class HybridNanofluidSolver:
 print("✓ ODE solver implemented!")
 
 
-# step 4: data generation from physics equations
+# 4: data generation from physics equations
 print("\nStep 4: Generating training data from physics equations...")
 
 class DataGenerator:
@@ -290,7 +290,7 @@ test_data = generator.generate_test_cases(n_cases=10)
 print("\n✓ Data generation complete!")
 
 
-# step 5: data preprocessing and normalization
+# 5: data preprocessing and normalization
 print("\nStep 5: Preparing data for neural network training...")
 
 class DataPreprocessor:
@@ -365,7 +365,7 @@ preprocessor.save_scalers()
 print("\n✓ Data preprocessing complete!")
 
 
-# step 6: neural network architecture
+# 6: neural network architecture
 print("\nStep 6: Building neural network architecture...")
 
 class ANNModel(nn.Module):
@@ -423,7 +423,7 @@ print(model.get_summary())
 print("\n✓ Neural network built successfully!")
 
 
-# step 7: model training
+# 7: model training
 print("\nStep 7: Training the neural network...")
 
 class Trainer:
@@ -578,7 +578,7 @@ history = trainer.train(
 print("\n✓ Training complete!")
 
 
-# step 8: model evaluation
+# 8: model evaluation
 print("\nStep 8: Evaluating model performance...")
 
 metrics = trainer.evaluate(data['X_test'], data['y_test'])
@@ -599,7 +599,7 @@ trainer.save_model(model_path)
 print("\n✓ Evaluation complete!")
 
 
-# step 9: visualization
+# 9: visualization
 print("\nStep 9: Creating visualizations...")
 
 # set plot style
@@ -705,7 +705,7 @@ print(f"  ✓ Sample predictions plot saved to: {plot_path2}")
 print("\n✓ Visualization complete!")
 
 
-# step 10: final summary
+# 10: final summary
 print("\n" + "=" * 80)
 print("FINAL SUMMARY")
 print("=" * 80)
